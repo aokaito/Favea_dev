@@ -13,8 +13,30 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Sparkles, Loader2 } from 'lucide-react'
+import { Sparkles, Loader2, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
+
+interface ExtractedEvent {
+  title: string
+  event_date: string | null
+  venue: string | null
+  source_url: string
+  deadlines: {
+    type: string
+    end_at: string
+    description?: string
+  }[]
+}
+
+interface CollectionResult {
+  success: boolean
+  data?: {
+    idol_name: string
+    events: ExtractedEvent[]
+    message: string
+  }
+  error?: string
+}
 
 interface AICollectDialogProps {
   open: boolean
@@ -27,6 +49,7 @@ export function AICollectDialog({ open, onClose, onCollect }: AICollectDialogPro
   const [url, setUrl] = useState('')
   const [isCollecting, setIsCollecting] = useState(false)
   const [activeTab, setActiveTab] = useState<'name' | 'url'>('name')
+  const [result, setResult] = useState<CollectionResult | null>(null)
 
   const handleCollect = async () => {
     const input = activeTab === 'name' ? keyword : url
@@ -42,20 +65,85 @@ export function AICollectDialog({ open, onClose, onCollect }: AICollectDialogPro
     }
 
     setIsCollecting(true)
+    setResult(null)
 
-    // AIによる検索のシミュレーション（実際のAPI実装時に置き換え）
-    setTimeout(() => {
-      onCollect(activeTab === 'name' ? keyword : '公式サイト', activeTab === 'url' ? url : undefined)
+    try {
+      const response = await fetch('/api/ai-draft', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          keyword: activeTab === 'name' ? keyword : undefined,
+          url: activeTab === 'url' ? url : undefined,
+        }),
+      })
+
+      const data: CollectionResult = await response.json()
+
+      if (!response.ok) {
+        setResult({ success: false, error: data.error || 'エラーが発生しました' })
+        toast.error(data.error || 'エラーが発生しました')
+        return
+      }
+
+      setResult(data)
+
+      if (data.data?.events && data.data.events.length > 0) {
+        toast.success(data.data.message)
+        onCollect(activeTab === 'name' ? keyword : '公式サイト', activeTab === 'url' ? url : undefined)
+      } else {
+        toast.info('イベント情報が見つかりませんでした')
+      }
+    } catch (error) {
+      console.error('Collection error:', error)
+      const message = 'ネットワークエラーが発生しました'
+      setResult({ success: false, error: message })
+      toast.error(message)
+    } finally {
       setIsCollecting(false)
-      setKeyword('')
-      setUrl('')
-      onClose()
-    }, 2000)
+    }
+  }
+
+  const handleClose = () => {
+    setResult(null)
+    setKeyword('')
+    setUrl('')
+    onClose()
+  }
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '未定'
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleDateString('ja-JP', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  const getDeadlineTypeLabel = (type: string) => {
+    switch (type) {
+      case 'lottery_start':
+        return '抽選開始'
+      case 'lottery_end':
+        return '抽選締切'
+      case 'payment':
+        return '入金締切'
+      default:
+        return type
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
@@ -69,8 +157,12 @@ export function AICollectDialog({ open, onClose, onCollect }: AICollectDialogPro
         <div className="space-y-4 py-4">
           <Tabs defaultValue={activeTab} onValueChange={(v) => setActiveTab(v as 'name' | 'url')}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="name">推し名</TabsTrigger>
-              <TabsTrigger value="url">URL</TabsTrigger>
+              <TabsTrigger value="name" disabled={isCollecting}>
+                推し名
+              </TabsTrigger>
+              <TabsTrigger value="url" disabled={isCollecting}>
+                URL
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="name">
               <div className="space-y-2">
@@ -108,6 +200,66 @@ export function AICollectDialog({ open, onClose, onCollect }: AICollectDialogPro
             </TabsContent>
           </Tabs>
 
+          {/* 収集結果表示 */}
+          {result && (
+            <div className="space-y-3">
+              {result.success && result.data?.events && result.data.events.length > 0 ? (
+                <div className="p-4 bg-green-50 rounded-lg space-y-3">
+                  <div className="flex items-center gap-2 text-green-700">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-medium">{result.data.message}</span>
+                  </div>
+                  <div className="space-y-3">
+                    {result.data.events.map((event, index) => (
+                      <div key={index} className="p-3 bg-white rounded border space-y-2">
+                        <div className="font-medium text-sm">{event.title}</div>
+                        <div className="text-xs text-gray-600 space-y-1">
+                          <div>開催日: {formatDate(event.event_date)}</div>
+                          {event.venue && <div>会場: {event.venue}</div>}
+                          {event.deadlines && event.deadlines.length > 0 && (
+                            <div className="space-y-1">
+                              {event.deadlines.map((deadline, dIndex) => (
+                                <div key={dIndex} className="text-orange-600">
+                                  {getDeadlineTypeLabel(deadline.type)}: {formatDate(deadline.end_at)}
+                                  {deadline.description && ` (${deadline.description})`}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {event.source_url && (
+                            <a
+                              href={event.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              ソースを確認
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : result.success && result.data?.events?.length === 0 ? (
+                <div className="p-4 bg-yellow-50 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-700">
+                    <AlertCircle className="w-5 h-5" />
+                    <span>イベント情報が見つかりませんでした</span>
+                  </div>
+                </div>
+              ) : result.error ? (
+                <div className="p-4 bg-red-50 rounded-lg">
+                  <div className="flex items-center gap-2 text-red-700">
+                    <AlertCircle className="w-5 h-5" />
+                    <span>{result.error}</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+
           <div className="p-4 bg-blue-50 rounded-lg space-y-2">
             <p className="text-sm text-blue-900">AI自動収集について</p>
             <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
@@ -120,22 +272,24 @@ export function AICollectDialog({ open, onClose, onCollect }: AICollectDialogPro
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isCollecting}>
-            キャンセル
+          <Button variant="outline" onClick={handleClose} disabled={isCollecting}>
+            {result?.success && result.data?.events && result.data.events.length > 0 ? '閉じる' : 'キャンセル'}
           </Button>
-          <Button onClick={handleCollect} disabled={isCollecting}>
-            {isCollecting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                収集中...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 mr-2" />
-                収集開始
-              </>
-            )}
-          </Button>
+          {(!result || !result.success || result.data?.events?.length === 0) && (
+            <Button onClick={handleCollect} disabled={isCollecting}>
+              {isCollecting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  収集中...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  収集開始
+                </>
+              )}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
