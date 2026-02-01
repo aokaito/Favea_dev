@@ -27,7 +27,13 @@ jobs:
         run: supabase link --project-ref $SUPABASE_PROJECT_ID
 
       - name: Apply database migrations
-        run: supabase db push
+        run: |
+          # 新しいマイグレーションがある場合のみ適用
+          if ls supabase/migrations/*.sql 1> /dev/null 2>&1; then
+            supabase db push
+          else
+            echo "No new migrations to apply"
+          fi
 
       - name: Deploy Edge Functions
         run: supabase functions deploy --project-ref $SUPABASE_PROJECT_ID
