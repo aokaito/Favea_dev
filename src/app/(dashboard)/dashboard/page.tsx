@@ -7,11 +7,12 @@ import { EventCard } from '@/components/event-card'
 import { EventDialog } from '@/components/event-dialog'
 import { AICollectDialog } from '@/components/ai-collect-dialog'
 import { CalendarView } from '@/components/calendar-view'
+import { TableView } from '@/components/table-view'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sparkles, Plus, Calendar, AlertCircle, Clock, List, CalendarDays } from 'lucide-react'
+import { Sparkles, Plus, Calendar, AlertCircle, Clock, List, CalendarDays, Table2 } from 'lucide-react'
 import { differenceInDays } from 'date-fns'
 import { toast } from 'sonner'
 
@@ -93,7 +94,7 @@ export default function DashboardPage() {
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false)
   const [filterStatus, setFilterStatus] = useState<EventStatus | 'all'>('all')
   const [filterOshi, setFilterOshi] = useState<string>('all')
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'table'>('list')
 
   // 推し名のリストを取得
   const oshiList = useMemo(() => {
@@ -285,6 +286,14 @@ export default function DashboardPage() {
             リスト
           </Button>
           <Button
+            variant={viewMode === 'table' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('table')}
+          >
+            <Table2 className="w-4 h-4 mr-2" />
+            表
+          </Button>
+          <Button
             variant={viewMode === 'calendar' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setViewMode('calendar')}
@@ -295,9 +304,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* カレンダー表示 */}
+      {/* ビュー切り替え */}
       {viewMode === 'calendar' ? (
         <CalendarView events={filteredEvents} onEventClick={handleEditEvent} />
+      ) : viewMode === 'table' ? (
+        <TableView events={filteredEvents} onEventClick={handleEditEvent} />
       ) : (
         /* リスト表示 */
         <Tabs defaultValue="all" className="w-full" onValueChange={(v) => setFilterStatus(v as EventStatus | 'all')}>
