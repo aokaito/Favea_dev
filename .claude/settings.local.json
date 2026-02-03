@@ -8,7 +8,8 @@
       "mcp__supabase__list_tables",
       "mcp__supabase__get_advisors",
       "Bash(wc:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(npx shadcn@latest add checkbox -y)"
     ]
   }
 }
