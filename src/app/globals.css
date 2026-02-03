@@ -13,24 +13,24 @@
     --card-foreground: 217 33% 17%;
     --popover: 0 0% 100%;
     --popover-foreground: 217 33% 17%;
-    /* Primary: #4F46E5 (Indigo-600) */
-    --primary: 239 84% 67%;
+    /* Primary: #2563EB (Blue-600) */
+    --primary: 221 83% 53%;
     --primary-foreground: 0 0% 100%;
-    /* Secondary: #A5B4FC (Indigo-300) */
-    --secondary: 230 94% 82%;
-    --secondary-foreground: 239 84% 47%;
+    /* Secondary: #93C5FD (Blue-300) */
+    --secondary: 212 96% 78%;
+    --secondary-foreground: 221 83% 43%;
     /* Success: #10B981 (Emerald-500) */
     --success: 160 84% 39%;
     --success-foreground: 0 0% 100%;
     --muted: 220 14% 96%;
     --muted-foreground: 215 16% 47%;
-    --accent: 230 94% 95%;
-    --accent-foreground: 239 84% 47%;
+    --accent: 214 95% 93%;
+    --accent-foreground: 221 83% 43%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 239 84% 67%;
+    --ring: 221 83% 53%;
     --radius: 0.5rem;
   }
 
@@ -42,23 +42,23 @@
     --card-foreground: 210 40% 98%;
     --popover: 217 33% 17%;
     --popover-foreground: 210 40% 98%;
-    /* Primary: slightly lighter for dark mode */
-    --primary: 239 84% 67%;
+    /* Primary: Blue-500 for dark mode */
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
-    /* Secondary: darker variant */
-    --secondary: 230 25% 25%;
-    --secondary-foreground: 230 94% 82%;
+    /* Secondary: darker blue variant */
+    --secondary: 217 33% 25%;
+    --secondary-foreground: 212 96% 78%;
     --success: 160 84% 39%;
     --success-foreground: 0 0% 100%;
     --muted: 217 33% 17%;
     --muted-foreground: 215 20% 65%;
-    --accent: 230 25% 25%;
-    --accent-foreground: 230 94% 82%;
+    --accent: 217 33% 25%;
+    --accent-foreground: 212 96% 78%;
     --destructive: 0 63% 31%;
     --destructive-foreground: 0 0% 98%;
     --border: 217 33% 25%;
     --input: 217 33% 25%;
-    --ring: 239 84% 67%;
+    --ring: 217 91% 60%;
   }
 }
 
