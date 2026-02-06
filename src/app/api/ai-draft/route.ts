@@ -18,9 +18,24 @@ interface QueryResult<T> {
   error: Error | null
 }
 
+// リクエストボディの型定義
+interface ExtractRequestBody {
+  mode?: 'extract'
+  keyword?: string
+  url?: string
+}
+
+interface SaveRequestBody {
+  mode: 'save'
+  idol_name: string
+  events: ExtractedEvent[]
+}
+
+type RequestBody = ExtractRequestBody | SaveRequestBody
+
 // Helper function to execute Supabase queries
 async function querySupabase<T>(
-  supabase: ReturnType<typeof createClient> extends Promise<infer R> ? R : never,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   table: string,
   operation: 'select' | 'insert',
   options: {
@@ -31,35 +46,33 @@ async function querySupabase<T>(
   }
 ): Promise<QueryResult<T>> {
   try {
-    // Use any to bypass TypeScript's strict type checking for dynamic Supabase queries
-    const client = supabase as { from: (t: string) => unknown }
-    let query = client.from(table) as Record<string, unknown>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query: any = supabase.from(table)
 
     if (operation === 'select') {
-      query = (query as { select: (c: string) => unknown }).select(options.columns || '*') as Record<string, unknown>
+      query = query.select(options.columns || '*')
       if (options.filter) {
-        query = (query as { eq: (c: string, v: string) => unknown }).eq(options.filter.column, options.filter.value) as Record<string, unknown>
+        query = query.eq(options.filter.column, options.filter.value)
       }
     } else if (operation === 'insert') {
-      query = (query as { insert: (d: unknown) => unknown }).insert(options.data) as Record<string, unknown>
+      query = query.insert(options.data)
       if (options.columns) {
-        query = (query as { select: (c: string) => unknown }).select(options.columns) as Record<string, unknown>
+        query = query.select(options.columns)
       }
     }
 
     if (options.single) {
-      return await (query as unknown as { single: () => Promise<QueryResult<T>> }).single()
+      return await query.single()
     }
 
-    return await (query as unknown as Promise<QueryResult<T>>)
+    return await query
   } catch (error) {
     return { data: null, error: error as Error }
   }
 }
 
 // 抽出のみ（保存しない）
-async function handleExtract(request: NextRequest) {
-  const body = await request.json()
+async function handleExtract(body: ExtractRequestBody) {
   const { keyword, url } = body
 
   if (!keyword && !url) {
@@ -72,7 +85,7 @@ async function handleExtract(request: NextRequest) {
     targetUrl = url
   } else {
     // 推し名からGoogle検索URLを生成
-    targetUrl = generateSearchUrl(keyword)
+    targetUrl = generateSearchUrl(keyword!)
   }
 
   // robots.txtチェック
@@ -119,7 +132,7 @@ async function handleExtract(request: NextRequest) {
 }
 
 // 保存処理
-async function handleSave(request: NextRequest) {
+async function handleSave(body: SaveRequestBody) {
   const supabase = await createClient()
 
   // 認証チェック
@@ -131,8 +144,9 @@ async function handleSave(request: NextRequest) {
     return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
   }
 
-  const body = await request.json()
-  const { idol_name, events } = body as { idol_name: string; events: ExtractedEvent[] }
+  const { idol_name, events } = body
+
+  console.log('handleSave called with:', { idol_name, eventsCount: events?.length })
 
   if (!idol_name || !events || events.length === 0) {
     return NextResponse.json({ error: 'アーティスト名とイベント情報が必要です' }, { status: 400 })
@@ -140,34 +154,39 @@ async function handleSave(request: NextRequest) {
 
   const savedEvents: ExtractedEvent[] = []
 
+  // まずIdolを取得または作成（1回だけ）
+  let idolId: string
+
+  const existingIdolResult = await querySupabase<IdRecord>(supabase, 'idols', 'select', {
+    columns: 'id',
+    filter: { column: 'name', value: idol_name },
+    single: true,
+  })
+
+  if (existingIdolResult.data) {
+    idolId = existingIdolResult.data.id
+    console.log('Found existing idol:', idolId)
+  } else {
+    const newIdolResult = await querySupabase<IdRecord>(supabase, 'idols', 'insert', {
+      data: { name: idol_name, tags: [] },
+      columns: 'id',
+      single: true,
+    })
+
+    if (newIdolResult.error || !newIdolResult.data) {
+      console.error('Idol creation error:', newIdolResult.error)
+      return NextResponse.json({ error: 'アーティストの作成に失敗しました' }, { status: 500 })
+    }
+    idolId = newIdolResult.data.id
+    console.log('Created new idol:', idolId)
+  }
+
+  // 各イベントを保存
   for (const event of events) {
     try {
-      // 1. Idolを取得または作成
-      let idolId: string
+      console.log('Saving event:', event.title)
 
-      const existingIdolResult = await querySupabase<IdRecord>(supabase, 'idols', 'select', {
-        columns: 'id',
-        filter: { column: 'name', value: idol_name },
-        single: true,
-      })
-
-      if (existingIdolResult.data) {
-        idolId = existingIdolResult.data.id
-      } else {
-        const newIdolResult = await querySupabase<IdRecord>(supabase, 'idols', 'insert', {
-          data: { name: idol_name, tags: [] },
-          columns: 'id',
-          single: true,
-        })
-
-        if (newIdolResult.error || !newIdolResult.data) {
-          console.error('Idol creation error:', newIdolResult.error)
-          continue
-        }
-        idolId = newIdolResult.data.id
-      }
-
-      // 2. Eventを作成
+      // Eventを作成
       const newEventResult = await querySupabase<IdRecord>(supabase, 'events', 'insert', {
         data: {
           idol_id: idolId,
@@ -175,7 +194,7 @@ async function handleSave(request: NextRequest) {
           event_date: event.event_date,
           venue: event.venue,
           source_url: event.source_url,
-          is_draft: true,
+          is_draft: false, // ユーザーが確認して保存したのでドラフトではない
           created_by: user.id,
         },
         columns: 'id',
@@ -187,37 +206,46 @@ async function handleSave(request: NextRequest) {
         continue
       }
       const eventId = newEventResult.data.id
+      console.log('Created event:', eventId)
 
-      // 3. 締切情報を作成
+      // 締切情報を作成
       if (event.deadlines && event.deadlines.length > 0) {
-        const deadlineInserts = event.deadlines.map((deadline) => ({
-          event_id: eventId,
-          deadline_type: deadline.type,
-          start_at: deadline.start_at || null,
-          end_at: deadline.end_at,
-          description: deadline.description || null,
-        }))
+        for (const deadline of event.deadlines) {
+          const deadlineResult = await querySupabase<IdRecord>(supabase, 'ticket_deadlines', 'insert', {
+            data: {
+              event_id: eventId,
+              deadline_type: deadline.type,
+              start_at: deadline.start_at || null,
+              end_at: deadline.end_at,
+              description: deadline.description || null,
+            },
+            columns: 'id',
+            single: true,
+          })
 
-        const deadlineResult = await querySupabase<null>(supabase, 'ticket_deadlines', 'insert', {
-          data: deadlineInserts,
-        })
-
-        if (deadlineResult.error) {
-          console.error('Deadline creation error:', deadlineResult.error)
+          if (deadlineResult.error) {
+            console.error('Deadline creation error:', deadlineResult.error)
+          } else {
+            console.log('Created deadline:', deadline.type)
+          }
         }
       }
 
-      // 4. UserEventを作成（ドラフトとして）
-      const userEventResult = await querySupabase<null>(supabase, 'user_events', 'insert', {
+      // UserEventを作成
+      const userEventResult = await querySupabase<IdRecord>(supabase, 'user_events', 'insert', {
         data: {
           user_id: user.id,
           event_id: eventId,
           status: 'not_applied',
         },
+        columns: 'id',
+        single: true,
       })
 
       if (userEventResult.error) {
         console.error('UserEvent creation error:', userEventResult.error)
+      } else {
+        console.log('Created user_event')
       }
 
       savedEvents.push(event)
@@ -226,6 +254,8 @@ async function handleSave(request: NextRequest) {
       continue
     }
   }
+
+  console.log('Total saved events:', savedEvents.length)
 
   return NextResponse.json({
     success: true,
@@ -238,16 +268,14 @@ async function handleSave(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // リクエストボディをクローンして読み取る（2回読めないため）
-    const clonedRequest = request.clone()
-    const body = await clonedRequest.json()
-    const { mode } = body
+    // ボディを1回だけ読み取る
+    const body: RequestBody = await request.json()
+    console.log('API received body:', JSON.stringify(body, null, 2))
 
-    if (mode === 'save') {
-      return handleSave(request)
+    if (body.mode === 'save') {
+      return handleSave(body as SaveRequestBody)
     } else {
-      // デフォルトは抽出モード
-      return handleExtract(request)
+      return handleExtract(body as ExtractRequestBody)
     }
   } catch (error) {
     console.error('AI Draft API Error:', error)
@@ -268,7 +296,7 @@ export async function GET() {
       return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
 
-    // ユーザーのドラフトイベントを取得
+    // ユーザーのイベントを取得
     const { data: userEvents, error: fetchError } = await supabase
       .from('user_events')
       .select(

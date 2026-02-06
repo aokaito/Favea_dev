@@ -151,22 +151,25 @@ export function AICollectDialog({ open, onClose, onCollect }: AICollectDialogPro
     setIsSaving(true)
 
     try {
+      const saveData = {
+        mode: 'save' as const,
+        idol_name: artistName,
+        events: selectedEvents.map((e) => ({
+          title: e.title,
+          event_date: e.event_date,
+          venue: e.venue,
+          source_url: e.source_url,
+          deadlines: e.deadlines,
+        })),
+      }
+      console.log('Saving data:', JSON.stringify(saveData, null, 2))
+
       const response = await fetch('/api/ai-draft', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          mode: 'save',
-          idol_name: artistName,
-          events: selectedEvents.map((e) => ({
-            title: e.title,
-            event_date: e.event_date,
-            venue: e.venue,
-            source_url: e.source_url,
-            deadlines: e.deadlines,
-          })),
-        }),
+        body: JSON.stringify(saveData),
       })
 
       const data = await response.json()
