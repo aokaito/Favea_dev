@@ -356,7 +356,7 @@ export default function DashboardPage() {
                     <EventCard
                       key={event.id}
                       event={event}
-                      onClick={() => handleEditEvent(event)}
+                      onEdit={handleEditEvent}
                     />
                   ))}
                 </div>
